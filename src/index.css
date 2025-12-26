@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+@theme {
+  /* Cores personalizadas da Loteca */
+  --color-loteca-green: #009045;
+  --color-loteca-yellow: #F4C900;
+  --color-loteca-dark: #1a1a1a;
+}
+
+/* Ajustes globais opcionais */
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+}
