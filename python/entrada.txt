@@ -1,0 +1,15 @@
+Jogo	Coluna 1	x	Coluna 2	Data
+1	 	CRYSTAL PALACE	 	TOTTENHAM	 	Domingo
+2	 	ARSENAL	 	BRIGHTON	 	Sábado
+3	 	BRENTFORD	 	BOURNEMOUTH	 	Sábado
+4	 	BURNLEY	 	EVERTON	 	Sábado
+5	 	LIVERPOOL	 	WOLVES	 	Sábado
+6	 	WEST HAM	 	FULHAM	 	Sábado
+7	 	TORINO	 	CAGLIARI CALCIO	 	Sábado
+8	 	CHELSEA	 	ASTON VILLA	 	Sábado
+9	 	UDINESE	 	LAZIO	 	Sábado
+10	 	PISA SC	 	JUVENTUS	 	Sábado
+11	 	NIGERIA	 	TUNISIA	 	Sábado
+12	 	MILAN	 	VERONA	 	Domingo
+13	 	SUNDERLAND	 	LEEDS UNITED	 	Domingo
+14	 	COSTA DO MARFIM	 	CAMAROES	 	Domingo

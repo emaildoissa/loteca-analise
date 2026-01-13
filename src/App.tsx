@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, History, Calculator, Trophy, Menu, X } from 'lucide-react';
+import { LayoutDashboard, History, Calculator, Trophy, Menu, X, Quote } from 'lucide-react';
 import Dashboard from './pages/Dashboard';
 import Historico from './pages/Historico';
 import Analise from './pages/Analise';
+import CacaZebras from './pages/CacaZebras';
+import AmbasMarcam from './pages/AmbasMarcam';
 
 function NavLink({ to, icon: Icon, children, onClick }: any) {
   const location = useLocation();
@@ -48,6 +50,9 @@ function App() {
                 <NavLink to="/" icon={LayoutDashboard}>Dashboard</NavLink>
                 <NavLink to="/analise" icon={Calculator}>Palpites</NavLink>
                 <NavLink to="/historico" icon={History}>Histórico</NavLink>
+                <NavLink to="/zebras" icon={Trophy}>Caca Zebras</NavLink>
+                {/* NOVO LINK AQUI */}
+                <NavLink to="/ambas-marcam" icon={Quote}>Ambas Marcam</NavLink>
               </div>
 
               {/* Mobile Menu Button */}
@@ -66,6 +71,9 @@ function App() {
               <NavLink to="/" icon={LayoutDashboard} onClick={() => setIsMenuOpen(false)}>Dashboard</NavLink>
               <NavLink to="/analise" icon={Calculator} onClick={() => setIsMenuOpen(false)}>Palpites</NavLink>
               <NavLink to="/historico" icon={History} onClick={() => setIsMenuOpen(false)}>Histórico</NavLink>
+              <NavLink to="/zebras" icon={Trophy} onClick={() => setIsMenuOpen(false)}>Caca Zebras</NavLink>
+              {/* NOVO LINK MOBILE AQUI */}
+              <NavLink to="/ambas-marcam" icon={Quote} onClick={() => setIsMenuOpen(false)}>Ambas Marcam</NavLink>
             </div>
           )}
         </nav>
@@ -76,6 +84,8 @@ function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/historico" element={<Historico />} />
             <Route path="/analise" element={<Analise />} />
+            <Route path="/zebras" element={<CacaZebras />} />
+            <Route path="/ambas-marcam" element={<AmbasMarcam />} />
           </Routes>
         </main>
 

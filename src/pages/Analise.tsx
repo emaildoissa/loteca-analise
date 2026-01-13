@@ -1,126 +1,267 @@
-import { useState } from 'react';
-import { Wand2 } from 'lucide-react';
-
-// Dados mockados para simular o concurso atual (normalmente viria de uma API ou DB)
-const JOGOS_ATUAIS = [
-  { id: 1, m: "Corinthians", v: "Palmeiras", probM: 0.30, probX: 0.35, probV: 0.35 },
-  { id: 2, m: "São Paulo", v: "Flamengo", probM: 0.40, probX: 0.30, probV: 0.30 },
-  { id: 3, m: "Cruzeiro", v: "Atlético-MG", probM: 0.33, probX: 0.34, probV: 0.33 },
-  { id: 4, m: "Botafogo", v: "Fluminense", probM: 0.45, probX: 0.25, probV: 0.30 },
-  { id: 5, m: "Grêmio", v: "Internacional", probM: 0.35, probX: 0.35, probV: 0.30 },
-  { id: 6, m: "Vasco", v: "Bahia", probM: 0.50, probX: 0.30, probV: 0.20 },
-  { id: 7, m: "Fortaleza", v: "Ceará", probM: 0.60, probX: 0.25, probV: 0.15 },
-  { id: 8, m: "Athletico-PR", v: "Coritiba", probM: 0.55, probX: 0.30, probV: 0.15 },
-  { id: 9, m: "Sport", v: "Náutico", probM: 0.45, probX: 0.30, probV: 0.25 },
-  { id: 10, m: "Goiás", v: "Vila Nova", probM: 0.40, probX: 0.40, probV: 0.20 },
-  { id: 11, m: "Vitória", v: "ABC", probM: 0.70, probX: 0.20, probV: 0.10 },
-  { id: 12, m: "Ponte Preta", v: "Guarani", probM: 0.33, probX: 0.34, probV: 0.33 },
-  { id: 13, m: "Avaí", v: "Figueirense", probM: 0.40, probX: 0.30, probV: 0.30 },
-  { id: 14, m: "Criciúma", v: "Chapecoense", probM: 0.50, probX: 0.30, probV: 0.20 },
-];
+import { Wand2, Loader2, Save, Trash2, Lock, Cloud } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 
 export default function Analise() {
-  const [palpite, setPalpite] = useState<(string|null)[]>(Array(14).fill(null));
-  const [selectedMatrix, setSelectedMatrix] = useState("7-4-3");
+  const [jogos, setJogos] = useState<any[]>([]);
+  const [concurso, setConcurso] = useState<any>(null);
+  const [selectedMatrix, setSelectedMatrix] = useState('7-4-3');
+  const [palpite, setPalpite] = useState<string[]>(Array(14).fill(null));
+  
+  // Estado de controle
+  const [jogoSalvo, setJogoSalvo] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  
+  const [acertos, setAcertos] = useState<number | null>(null);
 
-  const gerarPalpite = () => {
-    // Parser da matriz desejada (ex: 7-4-3)
-    const [target1, targetX, target2] = selectedMatrix.split('-').map(Number);
-    let counts = { '1': 0, 'X': 0, '2': 0 };
-    let newPalpite = Array(14).fill(null);
+  useEffect(() => {
+    carregarDados();
+  }, []);
 
-    // Algoritmo guloso simples para preencher baseado em probabilidade "imaginária"
-    // 1. Clonar jogos e ordenar por "clareza" (maior probabilidade de um resultado)
-    let jogosOrdenados = JOGOS_ATUAIS.map((j, idx) => ({...j, idx})).sort((a, b) => {
-        const maxA = Math.max(a.probM, a.probX, a.probV);
-        const maxB = Math.max(b.probM, b.probX, b.probV);
-        return maxB - maxA; // Jogos mais "óbvios" primeiro
-    });
+  async function carregarDados() {
+    setLoading(true);
+    // 1. Pega o concurso mais recente
+    const { data: dadosConcurso } = await supabase.from('historico_loteca').select('*').order('concurso', { ascending: false }).limit(1).single();
+    
+    if (dadosConcurso) {
+        setConcurso(dadosConcurso);
+        setJogos(dadosConcurso.jogos || []);
+        
+        // 2. BUSCA NO BANCO SE JÁ TEM PALPITE SALVO (Nuvem)
+        const { data: palpiteSalvo } = await supabase
+            .from('meus_palpites')
+            .select('*')
+            .eq('concurso', dadosConcurso.concurso)
+            .eq('tipo', 'loteca')
+            .single();
 
-    // 2. Preencher tentando respeitar a matriz
-    jogosOrdenados.forEach(jogo => {
-        const probs = [
-            { r: '1', p: jogo.probM, can: counts['1'] < target1 },
-            { r: 'X', p: jogo.probX, can: counts['X'] < targetX },
-            { r: '2', p: jogo.probV, can: counts['2'] < target2 }
-        ].sort((a, b) => b.p - a.p); // Tenta o mais provável primeiro
-
-        for (let op of probs) {
-            if (op.can) {
-                newPalpite[jogo.idx] = op.r;
-                counts[op.r as '1'|'X'|'2']++;
-                break;
+        if (palpiteSalvo) {
+            setPalpite(palpiteSalvo.dados);
+            setJogoSalvo(true);
+            
+            // Calcula acertos se já tiver resultado
+            if (dadosConcurso.qtd_1 > 0 || dadosConcurso.qtd_x > 0) {
+                calcularAcertos(dadosConcurso.jogos, palpiteSalvo.dados);
             }
+        }
+    }
+    setLoading(false);
+  }
+
+  const calcularAcertos = (jogosOficiais: any[], meuPalpite: string[]) => {
+    let count = 0;
+    jogosOficiais.forEach((j, i) => {
+        if (j.r && j.r === meuPalpite[i]) count++;
+    });
+    setAcertos(count);
+  };
+
+  const gerarPalpiteIA = () => {
+    if (jogoSalvo && !confirm("Você já tem um jogo salvo na nuvem. Quer apagar e gerar outro?")) return;
+
+    const novo = Array(14).fill(null);
+    const [meta1, metaX, meta2] = selectedMatrix.split('-').map(Number);
+    let count = { '1': 0, 'X': 0, '2': 0 };
+
+    const jogosOrdenados = jogos.map((j, index) => {
+        const p1 = j.probM || 33;
+        const pX = j.probX || 33;
+        const p2 = j.probV || 33;
+        const maxProb = Math.max(p1, pX, p2);
+        
+        let ideal = '1';
+        if (pX === maxProb) ideal = 'X';
+        if (p2 === maxProb) ideal = '2';
+        
+        return { index, maxProb, ideal };
+    }).sort((a, b) => b.maxProb - a.maxProb);
+
+    jogosOrdenados.forEach(item => {
+        const { index, ideal } = item;
+        if (ideal === '1' && count['1'] < meta1) { novo[index] = '1'; count['1']++; }
+        else if (ideal === 'X' && count['X'] < metaX) { novo[index] = 'X'; count['X']++; }
+        else if (ideal === '2' && count['2'] < meta2) { novo[index] = '2'; count['2']++; }
+        else {
+            if (count['1'] < meta1) { novo[index] = '1'; count['1']++; }
+            else if (count['X'] < metaX) { novo[index] = 'X'; count['X']++; }
+            else { novo[index] = '2'; count['2']++; }
         }
     });
 
-    // 3. Fallback: Se sobrar buracos (caso a matriz seja impossível ou bug), preencher com o mais provável
-    for(let i=0; i<14; i++) {
-        if(!newPalpite[i]) newPalpite[i] = '1'; 
-    }
-
-    setPalpite(newPalpite);
+    setPalpite(novo);
+    setJogoSalvo(false);
+    setAcertos(null);
   };
 
+  const salvarNaNuvem = async () => {
+    if (!concurso) return;
+    setSaving(true);
+
+    // SALVA NO SUPABASE (Upsert = Cria ou Atualiza)
+    const payload = {
+        concurso: concurso.concurso,
+        tipo: 'loteca',
+        dados: palpite
+    };
+
+    const { error } = await supabase
+        .from('meus_palpites')
+        .upsert(payload, { onConflict: 'concurso, tipo' });
+
+    setSaving(false);
+
+    if (error) {
+        alert('Erro ao salvar na nuvem: ' + error.message);
+    } else {
+        setJogoSalvo(true);
+        alert(`☁️ Jogo do Concurso ${concurso.concurso} SINCRONIZADO com sucesso!`);
+    }
+  };
+
+  const limparPalpite = async () => {
+    if (confirm("Apagar palpite da nuvem? Isso removerá do celular também.")) {
+        setSaving(true);
+        // Remove do banco
+        await supabase.from('meus_palpites').delete().eq('concurso', concurso.concurso).eq('tipo', 'loteca');
+        
+        setPalpite(Array(14).fill(null));
+        setJogoSalvo(false);
+        setSaving(false);
+    }
+  };
+
+  const handleManualClick = (i: number, op: string) => {
+      if (jogoSalvo) return;
+      const novo = [...palpite];
+      novo[i] = op;
+      setPalpite(novo);
+  }
+
+  if (loading) return <div className="p-10 text-center"><Loader2 className="animate-spin inline"/> Sincronizando com a nuvem...</div>;
+  if (!concurso) return <div className="p-10 text-center">Nenhum concurso aberto. Importe um CSV no Histórico.</div>;
+
+  const isFinalizado = concurso.qtd_1 > 0 || concurso.qtd_x > 0;
+
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
-      <div className="flex justify-between items-center">
+    <div className="max-w-4xl mx-auto space-y-6 pb-24">
+      {/* Header */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Gerador de Palpites (Concurso 1226)</h1>
-          <p className="text-gray-500">Estimativa baseada em probabilidades e padrão matricial.</p>
+            <h1 className="text-2xl font-bold">Concurso #{concurso.concurso}</h1>
+            <p className="text-gray-500 text-sm flex items-center gap-1">
+                {jogoSalvo ? <span className="text-green-600 flex items-center gap-1"><Cloud size={14}/> Salvo na Nuvem</span> : 'Editando Localmente'}
+            </p>
         </div>
-        <button 
-          onClick={gerarPalpite}
-          className="bg-loteca-green hover:bg-emerald-700 text-white px-6 py-3 rounded-lg font-bold shadow flex items-center gap-2 transition"
-        >
-          <Wand2 size={20} />
-          Gerar Palpite IA
-        </button>
+        
+        {acertos !== null && (
+            <div className="bg-blue-600 text-white px-4 py-2 rounded-lg text-center animate-bounce">
+                <div className="text-xs font-bold opacity-80">RESULTADO</div>
+                <div className="text-xl font-black">{acertos} PONTOS</div>
+            </div>
+        )}
       </div>
 
-      <div className="bg-white dark:bg-zinc-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-zinc-700">
-        <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mr-3">Matriz Alvo:</label>
-        <select 
-          value={selectedMatrix} 
-          onChange={(e) => setSelectedMatrix(e.target.value)}
-          className="bg-gray-100 dark:bg-zinc-900 border-none rounded p-2 text-sm font-mono"
-        >
-          <option value="7-4-3">7-4-3 (Padrão Ouro)</option>
-          <option value="6-4-4">6-4-4 (Equilibrada)</option>
-          <option value="5-5-4">5-5-4 (Muitos Empates)</option>
-          <option value="8-3-3">8-3-3 (Favoritos Casa)</option>
-        </select>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
-        {JOGOS_ATUAIS.map((jogo, i) => (
-          <div key={jogo.id} className="bg-white dark:bg-zinc-800 p-4 rounded-lg shadow-sm border border-gray-100 flex items-center justify-between relative overflow-hidden">
-             {/* Indicador de Palpite */}
-             {palpite[i] && (
-                <div className={`absolute left-0 top-0 bottom-0 w-1 ${palpite[i] === '1' ? 'bg-loteca-green' : palpite[i] === 'X' ? 'bg-gray-400' : 'bg-loteca-yellow'}`}></div>
-             )}
-
-             <div className="flex-1 text-right pr-4">
-                <span className="font-bold text-gray-800 dark:text-gray-200">{jogo.m}</span>
-                <div className="text-xs text-gray-400">Mandante</div>
-             </div>
-             
-             <div className="flex flex-col items-center px-2">
-                <span className="text-xs text-gray-300 font-mono mb-1">Jogo {i + 1}</span>
-                <div className="flex gap-1">
-                    <div className={`w-8 h-8 flex items-center justify-center rounded font-bold text-sm ${palpite[i] === '1' ? 'bg-loteca-green text-white shadow-md scale-110' : 'bg-gray-100 text-gray-400'}`}>1</div>
-                    <div className={`w-8 h-8 flex items-center justify-center rounded font-bold text-sm ${palpite[i] === 'X' ? 'bg-gray-500 text-white shadow-md scale-110' : 'bg-gray-100 text-gray-400'}`}>X</div>
-                    <div className={`w-8 h-8 flex items-center justify-center rounded font-bold text-sm ${palpite[i] === '2' ? 'bg-loteca-yellow text-black shadow-md scale-110' : 'bg-gray-100 text-gray-400'}`}>2</div>
-                </div>
+      {/* Controles */}
+      {!isFinalizado && (
+          <div className="bg-white p-4 rounded-xl shadow border flex flex-col md:flex-row gap-4 items-center justify-between sticky top-4 z-20">
+             <div className="flex items-center gap-2">
+                 <span className="font-bold text-gray-700">IA:</span>
+                 <select 
+                    value={selectedMatrix} 
+                    onChange={e => setSelectedMatrix(e.target.value)} 
+                    disabled={jogoSalvo}
+                    className="bg-gray-100 p-2 rounded border"
+                 >
+                    <option value="7-4-3">Padrão (7-4-3)</option>
+                    <option value="5-5-4">Zebra (5-5-4)</option>
+                 </select>
              </div>
 
-             <div className="flex-1 text-left pl-4">
-                <span className="font-bold text-gray-800 dark:text-gray-200">{jogo.v}</span>
-                <div className="text-xs text-gray-400">Visitante</div>
+             <div className="flex gap-2">
+                 {!jogoSalvo ? (
+                    <button onClick={gerarPalpiteIA} className="bg-purple-600 text-white px-4 py-2 rounded font-bold hover:bg-purple-700 flex items-center gap-2">
+                        <Wand2 size={18}/> Gerar Palpite
+                    </button>
+                 ) : (
+                    <button onClick={limparPalpite} className="bg-red-100 text-red-600 px-4 py-2 rounded font-bold hover:bg-red-200 flex items-center gap-2">
+                        <Trash2 size={18}/> {saving ? 'Apagando...' : 'Apagar da Nuvem'}
+                    </button>
+                 )}
              </div>
           </div>
-        ))}
+      )}
+
+      {/* Lista de Jogos */}
+      <div className="space-y-2">
+        {jogos.map((j: any, i: number) => {
+            const probM = j.probM || 0;
+            const oficial = j.r;
+            const meu = palpite[i];
+            const acertou = oficial && meu === oficial;
+            const errou = oficial && meu !== oficial;
+
+            return (
+            <div key={i} className={`bg-white p-3 rounded border flex items-center justify-between relative overflow-hidden ${acertou ? 'ring-2 ring-green-500 bg-green-50' : errou ? 'ring-2 ring-red-200 bg-red-50' : ''}`}>
+                {probM > 0 && (
+                    <div className="absolute bottom-0 left-0 h-1 bg-green-500 opacity-20" style={{width: `${probM}%`}}></div>
+                )}
+
+                <div className="w-1/3 text-right font-bold text-sm truncate">{j.m}</div>
+                
+                <div className="flex gap-1 mx-2 z-10">
+                    {['1','X','2'].map(Op => {
+                        const selecionado = meu === Op;
+                        const ehOficial = oficial === Op;
+                        
+                        let style = "bg-gray-50 text-gray-300 border-gray-200";
+                        if (selecionado) {
+                            if (Op === '1') style = "bg-loteca-green text-white shadow-lg scale-110";
+                            else if (Op === 'X') style = "bg-gray-500 text-white shadow-lg scale-110";
+                            else style = "bg-loteca-yellow text-black shadow-lg scale-110";
+                        }
+                        if (jogoSalvo && !selecionado) style += " opacity-30";
+
+                        return (
+                            <button 
+                                key={Op}
+                                onClick={() => handleManualClick(i, Op)}
+                                disabled={jogoSalvo || isFinalizado}
+                                className={`w-8 h-8 rounded font-bold text-sm border flex items-center justify-center transition-all ${style}`}
+                            >
+                                {Op}
+                                {ehOficial && <span className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full border-2 border-white"></span>}
+                            </button>
+                        )
+                    })}
+                </div>
+
+                <div className="w-1/3 text-left font-bold text-sm truncate">{j.v}</div>
+            </div>
+        )})}
       </div>
+
+      {/* BARRA FIXA DE SALVAMENTO (NUVEM) */}
+      {!isFinalizado && palpite.some(p => p !== null) && !jogoSalvo && (
+          <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t shadow-2xl flex justify-center z-50 animate-slideUp">
+              <button 
+                onClick={salvarNaNuvem}
+                disabled={saving}
+                className="bg-green-600 hover:bg-green-700 text-white text-lg font-black py-4 px-12 rounded-full shadow-lg flex items-center gap-3 transform hover:scale-105 transition"
+              >
+                  {saving ? <Loader2 className="animate-spin"/> : <Save size={24} />} 
+                  {saving ? 'SALVANDO...' : 'SALVAR NA NUVEM'}
+              </button>
+          </div>
+      )}
+
+      {/* STATUS SALVO */}
+      {jogoSalvo && (
+          <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-6 py-3 rounded-full shadow-xl flex items-center gap-3 z-50">
+              <Cloud size={18} className="text-blue-400"/>
+              <span className="font-bold">Sincronizado e Seguro.</span>
+          </div>
+      )}
     </div>
   );
 }
